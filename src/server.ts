@@ -58,8 +58,15 @@ app.post('/api/chat', async (req, res) => {
     return res.status(500).json({ error: 'Erro interno ao processar resposta.' });
   }
 });
-
-// ESTA É A PARTE CRUCIAL: O comando que faz o servidor ficar ligado aguardando o site!
+// Rota de Health Check
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    message: 'API Headless Commerce está rodando perfeitamente! 🚀',
+    version: '1.0.0'
+  });
+});
+//O comando que faz o servidor ficar ligado aguardando o site!
 app.listen(port, () => {
   console.log(`🚀 API Microserviço rodando com sucesso na porta ${port}`);
 });

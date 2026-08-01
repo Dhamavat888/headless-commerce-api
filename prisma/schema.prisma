@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Hierarquia de Cargos
+enum Role {
+  ADMIN
+  WORKER
+}
+
+// Status do Microserviço
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+// Tabela 1: O Trabalhador (Você, Bruna, Freelancers)
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String    // Será salva criptografada
+  role      Role      @default(WORKER)
+  
+  // Relacionamentos: Um trabalhador pode ter várias tarefas e vários registros de ponto
+  tasks     Task[]
+  timeLogs  TimeLog[]
+
+  createdAt DateTime  @default(now())
+}
+
+// Tabela 2: O Catálogo de Microserviços
+model Task {
+  id              String      @id @default(uuid())
+  title           String      // Ex: Produção de Caldo de Kenga
+  category        String      // Ex: F&B, TI, Administrativo
+  deadline        DateTime?
+  estimatedHours  Float       // Ex: 3.0
+  baseHourlyRate  Float       // Ex: 50.00
+  totalValue      Float       // Ex: 150.00
+  status          TaskStatus  @default(TODO)
+
+  // A tarefa pode ser "assumida" por um trabalhador
+  assignedToId    String?
+  assignedTo      User?       @relation(fields: [assignedToId], references: [id])
+
+  timeLogs        TimeLog[]
+
+  createdAt       DateTime    @default(now())
+}
+
+// Tabela 3: Relógio de Ponto (Time Tracker)
+model TimeLog {
+  id          String    @id @default(uuid())
+  startTime   DateTime  @default(now())
+  endTime     DateTime?
+  duration    Float?    // Calculado ao finalizar (em horas)
+
+  // O ponto pertence a uma Tarefa e a um Trabalhador
+  taskId      String
+  task        Task      @relation(fields: [taskId], references: [id])
+  
+  workerId    String
+  worker      User      @relation(fields: [workerId], references: [id])
+}

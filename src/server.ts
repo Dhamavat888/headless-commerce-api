@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import bcrypt from 'bcrypt';
+import prisma from './prisma';
 
 dotenv.config();
 
@@ -56,6 +58,89 @@ app.post('/api/chat', async (req, res) => {
     }
 
     return res.status(500).json({ error: 'Erro interno ao processar resposta.' });
+  }
+});
+// ==========================================
+// 🛡️ MÓDULO: HUB DE OPERAÇÕES (MÃE DIVINA OS)
+// ==========================================
+
+// 1. Rota para Cadastrar Trabalhador (Você, Bruna ou Freelancers)
+app.post('/api/users', async (req, res) => {
+  try {
+    const { email, password, role } = req.body;
+
+    // Validação básica
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
+    }
+
+    // Criptografa a senha gerando um "salt" (Segurança Nível Banco)
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Salva no banco PostgreSQL através do Prisma
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        role: role || 'WORKER', // Se não for especificado, entra como WORKER
+      },
+    });
+
+    // Retorna o sucesso ocultando a senha criptografada por segurança
+    return res.status(201).json({
+      message: 'Trabalhador cadastrado com sucesso!',
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        role: newUser.role
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao criar usuário:', error);
+    return res.status(500).json({ error: 'Erro interno ao cadastrar trabalhador.' });
+  }
+});
+
+// 2. Rota para Cadastrar Novo Microserviço (Admin)
+app.post('/api/tasks', async (req, res) => {
+  try {
+    const { title, category, estimatedHours, baseHourlyRate, totalValue } = req.body;
+
+    const newTask = await prisma.task.create({
+      data: {
+        title,
+        category,
+        estimatedHours,
+        baseHourlyRate,
+        totalValue,
+        status: 'TODO' // Toda tarefa nasce como "A Fazer"
+      },
+    });
+
+    return res.status(201).json({
+      message: 'Microserviço listado no quadro de tarefas!',
+      task: newTask
+    });
+  } catch (error) {
+    console.error('Erro ao criar tarefa:', error);
+    return res.status(500).json({ error: 'Erro interno ao criar a tarefa.' });
+  }
+});
+
+// 3. Rota para Listar Tarefas Disponíveis (Quadro Kanban)
+app.get('/api/tasks/available', async (req, res) => {
+  try {
+    // Busca apenas as tarefas que ainda não foram assumidas e ordena pelas mais recentes
+    const tasks = await prisma.task.findMany({
+      where: { status: 'TODO' },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    return res.json(tasks);
+  } catch (error) {
+    console.error('Erro ao buscar tarefas:', error);
+    return res.status(500).json({ error: 'Erro ao buscar o catálogo de serviços.' });
   }
 });
 // Rota de Health Check

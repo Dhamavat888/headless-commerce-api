@@ -36,9 +36,8 @@ app.post('/api/chat', async (req, res) => {
       5. Gaste menos tokens possível, evitando respostas longas e prolixas. Seja direto e objetivo.
       `;
 
-    // CORREÇÃO 1: Usando o identificador de modelo compatível e estável
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-3.5-flash-lite',
       systemInstruction
     });
 

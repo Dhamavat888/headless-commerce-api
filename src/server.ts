@@ -4,15 +4,16 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import bcrypt from 'bcrypt';
 import prisma from './prisma';
+import aiConfigRoutes from './routes/aiConfig';
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-// CORS totalmente liberado para evitar bloqueios de antivírus e portas locais
 app.use(cors());
 app.use(express.json());
+app.use('/api/ai-config', aiConfigRoutes);
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
@@ -32,14 +33,12 @@ app.post('/api/chat', async (req, res) => {
       2. Recuse educadamente qualquer outro assunto.
       3. Mensagem padrão de recusa: "Desculpe, sou o assistente exclusivo da Mãe Divina e do Hub Criativo. Só posso ajudar com dúvidas sobre nossos produtos e bebidas! Como posso te ajudar com isso hoje?"
       4. Mantenha um tom amigável, acolhedor e profissional. Seja breve e direto, evitando respostas longas ou prolixas e sempre que possível, utilize emojis para tornar a conversa mais leve e divertida.
-      5. Evite fornecer informações que não estejam relacionadas aos produtos e serviços da Mãe Divina e do Hub Criativo.
-      6. Se a pergunta for sobre preços, cardápio ou produtos, forneça informações precisas e atualizadas. 
-      7. Se a pergunta for sobre horários de funcionamento, localização ou contato, forneça informações corretas e atualizadas.
-      8. Gaste menos tokens possível, evitando respostas longas e prolixas. Seja direto e objetivo.
+      5. Gaste menos tokens possível, evitando respostas longas e prolixas. Seja direto e objetivo.
       `;
 
-   const model = genAI.getGenerativeModel({ 
-      model: 'gemini-3.5-flash-lite',
+    // CORREÇÃO 1: Usando o identificador de modelo compatível e estável
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-1.5-flash',
       systemInstruction
     });
 
@@ -51,7 +50,9 @@ app.post('/api/chat', async (req, res) => {
   } catch (error: any) {
     console.error('Erro na API isolada:', error);
 
-    if (error.status === 503) {
+    // CORREÇÃO 2: Verificação mais robusta de status/mensagem de alta demanda
+    const statusCode = error?.status || error?.statusCode;
+    if (statusCode === 503 || (error?.message && error.message.includes('503'))) {
       return res.json({ 
         resposta: "O servidor da Google está enfrentando uma alta demanda no momento. Por favor, aguarde alguns segundos e tente enviar novamente!" 
       });
@@ -60,34 +61,30 @@ app.post('/api/chat', async (req, res) => {
     return res.status(500).json({ error: 'Erro interno ao processar resposta.' });
   }
 });
+
 // ==========================================
 // 🛡️ MÓDULO: HUB DE OPERAÇÕES (MÃE DIVINA OS)
 // ==========================================
 
-// 1. Rota para Cadastrar Trabalhador (Você, Bruna ou Freelancers)
 app.post('/api/users', async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
-    // Validação básica
     if (!email || !password) {
       return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
     }
 
-    // Criptografa a senha gerando um "salt" (Segurança Nível Banco)
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Salva no banco PostgreSQL através do Prisma
     const newUser = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
-        role: role || 'WORKER', // Se não for especificado, entra como WORKER
+        role: role || 'WORKER',
       },
     });
 
-    // Retorna o sucesso ocultando a senha criptografada por segurança
     return res.status(201).json({
       message: 'Trabalhador cadastrado com sucesso!',
       user: {
@@ -102,10 +99,14 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// 2. Rota para Cadastrar Novo Microserviço (Admin)
 app.post('/api/tasks', async (req, res) => {
   try {
     const { title, category, estimatedHours, baseHourlyRate, totalValue } = req.body;
+
+    // CORREÇÃO 3: Validação de segurança para impedir tarefas sem título
+    if (!title) {
+      return res.status(400).json({ error: 'O título da tarefa é obrigatório.' });
+    }
 
     const newTask = await prisma.task.create({
       data: {
@@ -114,7 +115,7 @@ app.post('/api/tasks', async (req, res) => {
         estimatedHours,
         baseHourlyRate,
         totalValue,
-        status: 'TODO' // Toda tarefa nasce como "A Fazer"
+        status: 'TODO'
       },
     });
 
@@ -128,10 +129,8 @@ app.post('/api/tasks', async (req, res) => {
   }
 });
 
-// 3. Rota para Listar Tarefas Disponíveis (Quadro Kanban)
 app.get('/api/tasks/available', async (req, res) => {
   try {
-    // Busca apenas as tarefas que ainda não foram assumidas e ordena pelas mais recentes
     const tasks = await prisma.task.findMany({
       where: { status: 'TODO' },
       orderBy: { createdAt: 'desc' }
@@ -143,7 +142,7 @@ app.get('/api/tasks/available', async (req, res) => {
     return res.status(500).json({ error: 'Erro ao buscar o catálogo de serviços.' });
   }
 });
-// Rota de Health Check
+
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
@@ -151,7 +150,7 @@ app.get('/', (req, res) => {
     version: '1.0.0'
   });
 });
-//O comando que faz o servidor ficar ligado aguardando o site!
+
 app.listen(port, () => {
   console.log(`🚀 API Microserviço rodando com sucesso na porta ${port}`);
 });
